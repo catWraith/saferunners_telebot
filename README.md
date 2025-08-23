@@ -11,6 +11,12 @@ No group chat required.
 - One-tap **Complete ✅** button.
 - Automatic **DM alerts** to contacts if you don’t check in.
 
+## Config: tokens & .env
+The bot reads your token from:
+1) `BOT_TOKEN` (preferred), else
+2) `TELEGRAM_TOKEN`, else
+3) defaults to `"PUT-YOUR-TOKEN-HERE"`
+
 ## Run
 
 ```bash

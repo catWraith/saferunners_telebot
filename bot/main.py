@@ -83,10 +83,13 @@ def main():
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         level=logging.INFO,
     )
-
     if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "PUT-YOUR-TOKEN-HERE":
-        raise SystemExit("Please set TELEGRAM_TOKEN env var with your bot token.")
-
+        raise SystemExit(
+            "Missing bot token.\n"
+            "Set BOT_TOKEN in your environment or .env file (or TELEGRAM_TOKEN for backward-compat).\n"
+            "Example .env:\n"
+            "  BOT_TOKEN=123456:ABC-DEF...\n"
+        )
     app = build_app()
     app.run_polling()
 

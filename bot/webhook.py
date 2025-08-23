@@ -2,6 +2,7 @@ import logging
 import os
 
 from bot.main import build_app
+from bot.config import TELEGRAM_TOKEN
 
 # ENV:
 # WEBHOOK_URL         - full public base URL of your deployment (e.g., https://example.com)
@@ -15,6 +16,12 @@ def main():
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         level=logging.INFO,
     )
+
+    if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "PUT-YOUR-TOKEN-HERE":
+        raise SystemExit(
+            "Missing bot token.\n"
+            "Set BOT_TOKEN in your environment or .env file (or TELEGRAM_TOKEN for backward-compat)."
+        )
 
     base_url = os.getenv("WEBHOOK_URL")
     if not base_url:
