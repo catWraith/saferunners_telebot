@@ -1,8 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.config import DEFAULT_TZ
-from bot.utils.time_utils import get_user_tz
+from bot.utils.time_utils import is_valid_tz
 from bot.utils.contacts import add_contact, list_contacts, remove_contact_everywhere
+from bot.utils.links import build_deep_link
 from bot.constants import UD_TZ
 
 
@@ -28,11 +29,7 @@ async def tz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     tzname = " ".join(context.args).strip()
-    # validate via get_user_tz by round-trip set
-    from pytz import timezone as pytz_timezone, UnknownTimeZoneError
-    try:
-        pytz_timezone(tzname)
-    except UnknownTimeZoneError:
+    if not is_valid_tz(tzname):
         await update.effective_chat.send_message("Sorry, that timezone is not recognized.")
         return
     context.user_data[UD_TZ] = tzname
@@ -42,7 +39,7 @@ async def tz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     owner_id = update.effective_user.id
     bot_username = (await context.bot.get_me()).username
-    deep_link = f"https://t.me/{bot_username}?start=link_{owner_id}"
+    deep_link = build_deep_link(bot_username, owner_id)
     cnt = len(list_contacts(context.bot_data, owner_id))
     await update.effective_chat.send_message(
         f"Share this link with people you want alerted:\n{deep_link}\n\n"

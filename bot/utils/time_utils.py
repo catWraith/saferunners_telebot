@@ -16,6 +16,14 @@ def get_user_tz(context: ContextTypes.DEFAULT_TYPE):
         return pytz_timezone(DEFAULT_TZ)
 
 
+def is_valid_tz(name: str) -> bool:
+    try:
+        pytz_timezone(name)
+        return True
+    except UnknownTimeZoneError:
+        return False
+
+
 def parse_hhmm(s: str) -> Optional[Tuple[int, int]]:
     try:
         hh, mm = s.strip().split(":")
@@ -36,5 +44,11 @@ def local_hhmm_to_future_dt(h: int, m: int, tz) -> datetime:
     return candidate
 
 
-def to_utc(dt, tz) -> datetime:
+def to_utc(dt) -> datetime:
     return dt.astimezone(timezone.utc)
+
+
+def delay_seconds_from_utc_deadline(end_dt_utc: datetime) -> float:
+    """Non-negative seconds until 'end_dt_utc' from now (UTC)."""
+    delay = (end_dt_utc - datetime.now(timezone.utc)).total_seconds()
+    return max(delay, 0.0)

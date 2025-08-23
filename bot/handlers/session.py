@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta, timezone
-
+from datetime import datetime, timedelta
 from telegram import (
     Update,
     KeyboardButton,
@@ -11,14 +10,12 @@ from telegram import (
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
 )
 
 from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME, UD_ACTIVE, UD_JOB
-from bot.utils.time_utils import get_user_tz, parse_hhmm, local_hhmm_to_future_dt, to_utc
+from bot.utils.time_utils import get_user_tz, parse_hhmm, local_hhmm_to_future_dt, to_utc, delay_seconds_from_utc_deadline
 from bot.jobs.deadline import deadline_job
+from bot.utils.session_utils import format_location_summary
 
 
 def clear_active_session(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -31,7 +28,6 @@ def clear_active_session(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(UD_ACTIVE, None)
 
 
-# --- Flow entry ---
 async def begin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     clear_active_session(context)
     context.user_data[UD_ACTIVE] = {"location": None, "end_dt_utc": None}
@@ -45,7 +41,6 @@ async def begin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ASK_LOCATION
 
 
-# --- Location step ---
 async def got_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     session = context.user_data.get(UD_ACTIVE, {})
     if update.message and update.message.location:
@@ -77,7 +72,6 @@ async def got_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return ASK_TIME
 
 
-# --- Time selection ---
 async def time_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -114,13 +108,9 @@ async def time_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return await confirm_and_schedule(update, context, end_local)
 
 
-# --- Confirmation & scheduling ---
 async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE, end_local_dt) -> int:
     session = context.user_data.get(UD_ACTIVE, {})
-    tz = get_user_tz(context)
-
-    end_str = end_local_dt.strftime("%Y-%m-%d %H:%M (%Z)")
-    end_dt_utc = to_utc(end_local_dt, tz)
+    end_dt_utc = to_utc(end_local_dt)
     session["end_dt_utc"] = end_dt_utc.isoformat()
     context.user_data[UD_ACTIVE] = session
 
@@ -129,13 +119,10 @@ async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("❌ Cancel session", callback_data="cancel")],
     ])
 
-    loc_summary = ""
-    if session.get("location", {}).get("type") == "coords":
-        lat = session["location"]["lat"]
-        lon = session["location"]["lon"]
-        loc_summary = f"Location: (lat {lat:.5f}, lon {lon:.5f})"
-    elif session.get("location", {}).get("type") == "text":
-        loc_summary = f"Location: {session['location']['text']}"
+    loc_summary = format_location_summary(session.get("location"))
+
+    tz = get_user_tz(context)
+    end_str = end_local_dt.strftime("%Y-%m-%d %H:%M (%Z)")
 
     await update.effective_chat.send_message(
         f"Session armed.\n{loc_summary}\nPlanned end: {end_str}\n\n"
@@ -143,7 +130,7 @@ async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=ikb,
     )
 
-    delay = (end_dt_utc - datetime.now(timezone.utc)).total_seconds()
+    delay = delay_seconds_from_utc_deadline(end_dt_utc)
     delay = max(delay, 1.0)
 
     job = context.job_queue.run_once(
@@ -156,7 +143,6 @@ async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
-# --- Inline buttons outside conv ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     data = query.data
@@ -172,7 +158,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
 
-# --- Mid-session updates (free text / gps) ---
 async def free_text_during_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if UD_ACTIVE not in context.user_data or not context.user_data[UD_ACTIVE]:
         return

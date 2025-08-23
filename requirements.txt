@@ -1,2 +1,5 @@
 python-telegram-bot==21.6
 pytz>=2024.1
+# (dev/testing; optional)
+pytest>=8.2
+pytest-asyncio>=0.23
