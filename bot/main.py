@@ -36,7 +36,14 @@ def build_app() -> Application:
     app = Application.builder().token(TELEGRAM_TOKEN).persistence(persistence).build()
 
     # Deep-link /start with parameter *before* bare /start so it can catch the param variant
-    app.add_handler(MessageHandler(filters.Regex(r"^/start(\s+.+)?$"), start_param_entry))
+    app.add_handler(
+        MessageHandler(
+        filters.Regex(r"^/start\s+\S+"),  # only matches when a param exists
+        start_param_entry,
+        block=False,  # don't block other handlers
+        )
+    )
+    # app.add_handler(MessageHandler(filters.Regex(r"^/start(\s+.+)?$"), start_param_entry))
     app.add_handler(CommandHandler("start", start))
 
     # Core commands
