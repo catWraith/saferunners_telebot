@@ -7,7 +7,10 @@ from telegram.ext import (
     CallbackQueryHandler,
     PicklePersistence,
     filters,
+    Defaults
 )
+
+from telegram.constants import ParseMode
 
 from bot.config import TELEGRAM_TOKEN, PERSISTENCE_FILE
 from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME
@@ -28,12 +31,18 @@ from bot.handlers.session import (
     free_gps_during_session,
     free_text_during_session,
 )
-
+from bot.handlers.errors import on_error
 
 def build_app() -> Application:
     persistence = PicklePersistence(filepath=PERSISTENCE_FILE)
 
-    app = Application.builder().token(TELEGRAM_TOKEN).persistence(persistence).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .persistence(persistence)
+        .defaults(Defaults(parse_mode=ParseMode.HTML))  # << add this
+        .build()
+    )
 
     # Deep-link /start with parameter *before* bare /start so it can catch the param variant
     app.add_handler(
@@ -105,6 +114,8 @@ def main():
             "JobQueue is not available. Install with:\n"
             '  pip install "python-telegram-bot[job-queue]==21.6"\n'
         )
+
+    app.add_error_handler(on_error)
 
     app.run_polling()
 

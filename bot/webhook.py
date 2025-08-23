@@ -3,6 +3,7 @@ import os
 
 from bot.main import build_app
 from bot.config import TELEGRAM_TOKEN
+from bot.handlers.errors import on_error
 
 # ENV:
 # WEBHOOK_URL         - full public base URL of your deployment (e.g., https://example.com)
@@ -37,6 +38,8 @@ def main():
 
     app = build_app()
     # PTB will spin an aiohttp server internally
+    app.add_error_handler(on_error)
+
     app.run_webhook(
         listen=host,
         port=port,

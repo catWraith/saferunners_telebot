@@ -15,7 +15,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• Use /link to generate your personal invite link. Share it with people you want alerted.\n"
         "  They must open your link and press Start so I can DM them if needed.\n"
         "• Use /begin to start a session: send your location (GPS or text) and your planned end time.\n"
-        "• Tap **Complete ✅** when you’re done. If you don’t, I’ll notify your contacts at the deadline.\n\n"
+        "• Tap <b>Complete ✅</b> when you’re done. If you don’t, I’ll notify your contacts at the deadline.\n\n"
         f"Current timezone: {tz} (change with /tz <IANA_tz>, e.g. /tz Asia/Singapore)"
     )
     await update.effective_chat.send_message(msg)

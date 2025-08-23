@@ -1,34 +1,37 @@
-from datetime import timezone, datetime
+import logging
 from telegram.ext import ContextTypes
-
 from bot.utils.contacts import list_contacts
-from bot.constants import UD_ACTIVE, UD_JOB
+from bot.constants import UD_ACTIVE, UD_JOB  # you won’t need these now, but ok to keep
 
+logger = logging.getLogger(__name__)
 
 async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Notifies contacts if the user missed their completion deadline."""
     job = context.job
     chat_id = job.chat_id
-    user = await context.bot.get_chat(chat_id)
+    payload = job.data or {}
+    owner_id = payload.get("owner_id")
 
-    session = context.user_data.get(UD_ACTIVE)
-    # If session was cleared already, nothing to do
-    if not session or not session.get("end_dt_utc"):
+    # If the session was cancelled or completed, bail
+    if payload.get("cancelled"):
         return
 
-    # Mark session handled
-    context.user_data[UD_ACTIVE] = None
-    context.user_data[UD_JOB] = None
-
+    # For friendliness, we still DM the runner (chat_id)
     try:
         await context.bot.send_message(
             chat_id,
             "⚠️ End time reached and no completion recorded. Notifying your contacts now.",
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("deadline_job: failed to notify runner chat_id=%s: %s", chat_id, e)
 
-    contacts = list_contacts(context.bot_data, user.id)
+    # Alert contacts (fetched live from bot_data so additions/removals since scheduling are reflected)
+    if not owner_id:
+        # fallback: try to resolve owner as chat_id (runner), which is typical
+        owner_id = chat_id
+
+    contacts = list_contacts(context.bot_data, owner_id)
+    loc = payload.get("location")
+
     if not contacts:
         try:
             await context.bot.send_message(chat_id, "No authorized contacts found. Use /link to add some.")
@@ -36,12 +39,18 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             pass
         return
 
+    # Compose + send
+    try:
+        owner = await context.bot.get_chat(chat_id)  # safe; just for name
+        who = owner.full_name or "the user"
+    except Exception:
+        who = "the user"
+
     alert_text = (
-        f"⚠️ Safety alert for {user.full_name or 'the user'}\n"
+        f"⚠️ Safety alert for {who}\n"
         "They did not check in as completed by their planned end time.\n"
     )
 
-    loc = session.get("location")
     for cid in contacts:
         try:
             await context.bot.send_message(cid, alert_text)
@@ -50,10 +59,11 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                     await context.bot.send_location(cid, latitude=loc["lat"], longitude=loc["lon"])
                 elif loc.get("type") == "text":
                     await context.bot.send_message(cid, f"Last reported location: {loc['text']}")
-        except Exception:
-            # ignore individual DM failures
-            pass
+        except Exception as e:
+            # Common case: contact never pressed Start => 403; we ignore individual failures
+            logger.info("deadline_job: failed DM to contact %s: %s", cid, e)
 
+    # Tell runner how many we attempted
     try:
         await context.bot.send_message(chat_id, f"Attempted to notify {len(contacts)} contact(s).")
     except Exception:
