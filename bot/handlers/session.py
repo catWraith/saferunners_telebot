@@ -58,6 +58,7 @@ async def got_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     now_local = datetime.now(tz).strftime("%H:%M")
 
     ikb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("+1 min", callback_data="mins:1"),],
         [InlineKeyboardButton("+15 min", callback_data="mins:15"),
          InlineKeyboardButton("+30 min", callback_data="mins:30")],
         [InlineKeyboardButton("+45 min", callback_data="mins:45"),
@@ -132,6 +133,13 @@ async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYP
 
     delay = delay_seconds_from_utc_deadline(end_dt_utc)
     delay = max(delay, 1.0)
+
+    if context.job_queue is None:
+        await update.effective_chat.send_message(
+            "⚠️ Scheduling unavailable (JobQueue missing). Ask the admin to install "
+            "python-telegram-bot[job-queue]. I won’t be able to alert contacts."
+        )
+        return ConversationHandler.END
 
     job = context.job_queue.run_once(
         deadline_job,

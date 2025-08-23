@@ -98,6 +98,14 @@ def main():
             "  BOT_TOKEN=123456:ABC-DEF...\n"
         )
     app = build_app()
+
+    # Guard: make sure JobQueue exists (installed with the extra)
+    if app.job_queue is None:
+        raise SystemExit(
+            "JobQueue is not available. Install with:\n"
+            '  pip install "python-telegram-bot[job-queue]==21.6"\n'
+        )
+
     app.run_polling()
 
 
