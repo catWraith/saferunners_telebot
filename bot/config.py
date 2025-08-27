@@ -51,3 +51,6 @@ DEFAULT_TZ = os.environ.get("DEFAULT_TZ", "Asia/Singapore")
 
 # Persistence filename (PicklePersistence)
 PERSISTENCE_FILE = os.environ.get("STATE_FILE", "saferunner_data.pkl")
+
+# Whether admin will be alerted on being added as alert
+ALERT_WHEN_ADDED = os.environ.get("ALERT", False)

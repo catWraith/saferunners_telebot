@@ -12,11 +12,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tz = context.user_data.get(UD_TZ, DEFAULT_TZ)
     msg = (
         f"Hi {user.first_name or 'there'}! I’ll monitor your exercise sessions.\n\n"
-        "• Use /link to generate your personal invite link. Share it with people you want alerted.\n"
-        "  They must open your link and press Start so I can DM them if needed.\n"
+        "• Use /link to generate your invite link to share with people you want alerted.\n"
+        "They must open your link and press Start so I can DM them if needed.\n"
+        "• Use /contactlink to generate your invite link to share with people whom you want to alert you.\n"
         "• Use /begin to start a session: send your location (GPS or text) and your planned end time.\n"
         "• Tap <b>Complete ✅</b> when you’re done. If you don’t, I’ll notify your contacts at the deadline.\n\n"
-        f"Current timezone: {tz} (change with /tz <IANA_tz>, e.g. /tz Asia/Singapore)"
+        f"Current timezone: {tz} (change with /tz <code>IANA_tz</code>, e.g. /tz Asia/Singapore)"
     )
     await update.effective_chat.send_message(msg)
 
@@ -24,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def tz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.effective_chat.send_message(
-            f"Usage: /tz <IANA_timezone>\nExample: /tz Asia/Singapore\n"
+            f"Usage: /tz <code>IANA_timezone</code>\nExample: /tz Asia/Singapore\n"
             f"Current: {context.user_data.get(UD_TZ, DEFAULT_TZ)}"
         )
         return

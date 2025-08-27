@@ -47,7 +47,7 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         who = "the user"
 
     alert_text = (
-        f"⚠️ Safety alert for {who}\n"
+        f"⚠️ Safety alert for {who}, {chat_id}\n"
         "They did not check in as completed by their planned end time.\n"
     )
 
