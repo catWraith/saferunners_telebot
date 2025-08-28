@@ -2,8 +2,11 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.config import DEFAULT_TZ, ALERT_WHEN_ADDED
 from bot.utils.time_utils import is_valid_tz
-from bot.utils.contacts import add_contact, list_contacts, remove_contact_everywhere
-from bot.utils.links import build_deep_link, build_contact_offer_link
+from bot.utils.contacts import (
+    add_contact, list_contacts, remove_contact_everywhere,
+    remove_contact, blacklist_add, blacklist_remove, blacklist_list
+)
+from bot.utils.links import build_deep_link, build_contact_offer_link, build_bundle_link
 from bot.constants import UD_TZ
 
 
@@ -79,7 +82,6 @@ async def stopalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await update.effective_chat.send_message("You weren’t subscribed to any alerts.")
 
-
 async def start_param_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle deep-link parameter for contact authorization: /start link_<owner_id>"""
     message = update.message or update.edited_message
@@ -136,3 +138,148 @@ async def start_param_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             except Exception:
                 pass
             return
+    
+    if param and param.startswith("bundle_"):
+        payload = param.split("_", 1)[1]
+        # allow comma- or underscore-separated, keep commas preferred (shorter)
+        parts = [p for p in payload.replace("_", ",").split(",") if p]
+        contact_ids = []
+        for p in parts:
+            try:
+                contact_ids.append(int(p))
+            except Exception:
+                pass
+        if not contact_ids:
+            await update.effective_chat.send_message("Invalid bundle link.")
+            return
+        runner_id = update.effective_user.id
+        added = 0
+        for cid in dict.fromkeys(contact_ids):  # de-dupe while preserving order
+            add_contact(context.bot_data, runner_id, cid)
+            added += 1
+            # Optional courtesy ping to contact
+            if ALERT_WHEN_ADDED:
+                try:
+                    runner = update.effective_user
+                    await context.bot.send_message(
+                        cid,
+                        f"Heads up: {runner.full_name or 'A runner'} added you as an alert contact (bundle)."
+                    )
+                except Exception:
+                    pass
+        await update.effective_chat.send_message(f"Added {added} contact(s) from bundle link. Use /contactlist to view.")
+        return
+        
+async def unlink_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runner removes a specific contact id from their alert list."""
+    if not context.args:
+        await update.effective_chat.send_message("Usage: /unlink <contact_id>")
+        return
+    try:
+        cid = int(context.args[0])
+    except Exception:
+        await update.effective_chat.send_message("Please provide a numeric contact ID.")
+        return
+    owner_id = update.effective_user.id
+    ok = remove_contact(context.bot_data, owner_id, cid)
+    if ok:
+        await update.effective_chat.send_message(f"Removed {cid} from your contacts.")
+    else:
+        await update.effective_chat.send_message(f"{cid} wasn’t in your contacts.")
+
+async def contactlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show your contacts with best-effort names."""
+    owner_id = update.effective_user.id
+    ids = list_contacts(context.bot_data, owner_id)
+    if not ids:
+        await update.effective_chat.send_message("You have no contacts yet. Use /link or tap someone’s /contactlink.")
+        return
+    lines = []
+    for cid in ids:
+        try:
+            chat = await context.bot.get_chat(cid)
+            name = chat.full_name or str(cid)
+        except Exception:
+            name = str(cid)
+        lines.append(f"• {name} (ID {cid})")
+    await update.effective_chat.send_message("Your contacts:\n" + "\n".join(lines))
+
+async def blacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Contacts control which runner IDs they will NOT receive alerts from.
+    Usage:
+      /blacklist list
+      /blacklist add <runner_id>
+      /blacklist remove <runner_id>
+    """
+    user_id = update.effective_user.id
+    if not context.args:
+        await update.effective_chat.send_message(
+            "Usage:\n/blacklist list\n/blacklist add <runner_id>\n/blacklist remove <runner_id>"
+        )
+        return
+    sub = context.args[0].lower()
+    if sub == "list":
+        bl = blacklist_list(context.bot_data, user_id)
+        if not bl:
+            await update.effective_chat.send_message("Your blacklist is empty.")
+        else:
+            await update.effective_chat.send_message("Blacklisted runner IDs:\n" + ", ".join(map(str, bl)))
+        return
+    if sub in ("add", "remove"):
+        if len(context.args) < 2:
+            await update.effective_chat.send_message(f"Usage: /blacklist {sub} <runner_id>")
+            return
+        try:
+            rid = int(context.args[1])
+        except Exception:
+            await update.effective_chat.send_message("runner_id must be numeric.")
+            return
+        if sub == "add":
+            blacklist_add(context.bot_data, user_id, rid)
+            await update.effective_chat.send_message(f"Added {rid} to your blacklist.")
+        else:
+            ok = blacklist_remove(context.bot_data, user_id, rid)
+            if ok:
+                await update.effective_chat.send_message(f"Removed {rid} from your blacklist.")
+            else:
+                await update.effective_chat.send_message(f"{rid} wasn’t in your blacklist.")
+        return
+    await update.effective_chat.send_message("Unknown subcommand. Use: list, add, remove.")
+
+async def bundle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Create one link that adds MULTIPLE contacts to a runner when clicked.
+    Usage: /bundle <id1> <id2> ... [me]
+    Tip: Keep it short (Telegram start param is limited). Aim ≤ 5 IDs.
+    """
+    args = context.args or []
+    if not args:
+        await update.effective_chat.send_message("Usage: /bundle <id1> <id2> ... [me]")
+        return
+    contact_ids = []
+    for a in args:
+        if a.lower() == "me":
+            contact_ids.append(update.effective_user.id)
+        else:
+            try:
+                contact_ids.append(int(a))
+            except Exception:
+                await update.effective_chat.send_message(f"Ignore non-numeric argument: {a}")
+    # de-dupe & trim if too many
+    contact_ids = sorted(set(contact_ids))
+    if not contact_ids:
+        await update.effective_chat.send_message("No valid contact IDs provided.")
+        return
+    if len(contact_ids) > 6:
+        await update.effective_chat.send_message(
+            "That’s a lot—Telegram limits deep-link length. I’ll include the first 6."
+        )
+        contact_ids = contact_ids[:6]
+    bot_username = (await context.bot.get_me()).username
+    link = build_bundle_link(bot_username, contact_ids)
+    listed = ", ".join(map(str, contact_ids))
+    await update.effective_chat.send_message(
+        "Share this link with the runner. When they tap it, they’ll add ALL of these contacts:\n"
+        f"IDs: {listed}\n{link}"
+    )

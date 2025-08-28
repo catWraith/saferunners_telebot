@@ -1,7 +1,7 @@
 import logging
 from telegram.ext import ContextTypes
 from bot.utils.contacts import list_contacts
-from bot.constants import UD_ACTIVE, UD_JOB  # you won’t need these now, but ok to keep
+from bot.constants import UD_ACTIVE, UD_JOB, BD_BLACKLIST
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,8 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         owner_id = chat_id
 
     contacts = list_contacts(context.bot_data, owner_id)
+    # Skip contacts who blacklisted this runner
+    blmap = context.bot_data.get(BD_BLACKLIST, {})
     loc = payload.get("location")
 
     if not contacts:
@@ -52,6 +54,9 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     for cid in contacts:
+        bl = blmap.get(str(cid), [])
+        if owner.id in bl:
+            continue
         try:
             await context.bot.send_message(cid, alert_text)
             if loc:

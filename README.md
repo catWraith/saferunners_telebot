@@ -10,12 +10,24 @@ No group chat required.
 - Set end time via quick buttons or **HH:MM** custom input.
 - One-tap **Complete ✅** button.
 - Automatic **DM alerts** to contacts if you don’t check in.
+- Two-way sharing:
+  - Runners ➜ contacts (`/link`)
+  - Contacts ➜ runners (`/contactlink`)
 
 ## Config: tokens & .env
 The bot reads your token from:
 1) `BOT_TOKEN` (preferred), else
 2) `TELEGRAM_TOKEN`, else
 3) defaults to `"PUT-YOUR-TOKEN-HERE"`
+
+## Commands
+- `/contactlink` – (for contacts) generate a link you can share with runners
+- `/unlink <contact_id>`     – remove that contact from your alert list
+- `/contactlist`             – show your contacts
+- `/blacklist list|add|remove <runner_id>`  – (for contacts) control who can alert you
+- `/contactlink`             – generate a link you (a contact) can share with runners
+- `/bundle <id1> <id2> ... [me]` – one link that adds multiple contacts to a runner
+
 
 ## Run
 

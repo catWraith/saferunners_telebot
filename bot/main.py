@@ -15,13 +15,16 @@ from telegram.constants import ParseMode
 from bot.config import TELEGRAM_TOKEN, PERSISTENCE_FILE
 from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME
 from bot.handlers.start import (
-     start,
-     tz_cmd,
-     link_cmd,
-     contactlink_cmd,
-     contacts_cmd,
-     stopalerts_cmd,
-     start_param_entry,
+    start,
+    tz_cmd,
+    link_cmd,
+    contactlink_cmd,
+    unlink_cmd,
+    contactlist_cmd,
+    blacklist_cmd,
+    bundle_cmd,
+    contacts_cmd,
+    stopalerts_cmd,
 )
 from bot.handlers.session import (
     begin_cmd,
@@ -60,6 +63,10 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("tz", tz_cmd))
     app.add_handler(CommandHandler("link", link_cmd))
     app.add_handler(CommandHandler("contactlink", contactlink_cmd))
+    app.add_handler(CommandHandler("unlink", unlink_cmd))
+    app.add_handler(CommandHandler("contactlist", contactlist_cmd))
+    app.add_handler(CommandHandler("blacklist", blacklist_cmd))
+    app.add_handler(CommandHandler("bundle", bundle_cmd))
     app.add_handler(CommandHandler("contacts", contacts_cmd))
     app.add_handler(CommandHandler("stopalerts", stopalerts_cmd))
 
