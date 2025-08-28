@@ -21,6 +21,7 @@ from bot.handlers.start import (
     contactlink_cmd,
     unlink_cmd,
     contactlist_cmd,
+    start_param_entry,
     blacklist_cmd,
     bundle_cmd,
     contacts_cmd,
