@@ -215,7 +215,11 @@ async def blacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     if not context.args:
         await update.effective_chat.send_message(
-            "Usage:\n/blacklist list\n/blacklist add <runner_id>\n/blacklist remove <runner_id>"
+            "Usage:\n"
+            "/blacklist list\n"
+            "/blacklist add <runner_id>\n"
+            "/blacklist remove <runner_id>\n\n"
+            "Replace <runner_id> with the numeric ID of the runner you want to block."
         )
         return
     sub = context.args[0].lower()
