@@ -10,11 +10,94 @@ from bot.utils.links import build_deep_link, build_contact_offer_link, build_bun
 from bot.constants import UD_TZ
 
 
+HELP_ENTRIES = [
+    (
+        "help",
+        "Show all commands or get instructions for one command.",
+        "Usage: /help [command]\n"
+        "Without arguments it lists every command with a short description."
+        " Add a command (with or without the slash) to see detailed guidance.",
+    ),
+    (
+        "start",
+        "Show the welcome message and process invite links.",
+        "Use /start any time to see the quick-start tips again. If you tap a "
+        "deep link such as /start link_<code>user_id</code> or /start "
+        "contact_<code>contact_id</code>, I’ll automatically authorize that "
+        "relationship.",
+    ),
+    (
+        "begin",
+        "Start an exercise safety session.",
+        "Usage: /begin. I’ll ask for your location (GPS pin or text) and your "
+        "expected finish time. Tap <b>Complete ✅</b> when you’re safe, or "
+        "<b>Cancel</b> to abort the session.",
+    ),
+    (
+        "tz",
+        "Set your timezone for deadlines.",
+        "Usage: /tz <code>IANA_timezone</code> (e.g. /tz Asia/Singapore)."
+        " This affects how I interpret the end time you enter during /begin.",
+    ),
+    (
+        "link",
+        "Generate a runner invite link for alert contacts.",
+        "Usage: /link. Share the generated URL with people who should be "
+        "alerted if you miss a check-in. They must open it and press Start once.",
+    ),
+    (
+        "contactlink",
+        "Generate a contact invite link for runners.",
+        "Usage: /contactlink. Share this when you want runners to add you as "
+        "their alert contact. They only need to press Start once.",
+    ),
+    (
+        "contacts",
+        "Show how many alert contacts you currently have.",
+        "Usage: /contacts. Displays the count of contacts who are authorized "
+        "to receive alerts about your sessions.",
+    ),
+    (
+        "contactlist",
+        "List alert contacts with best-effort names and IDs.",
+        "Usage: /contactlist. I’ll try to display each contact’s name and "
+        "Telegram ID.",
+    ),
+    (
+        "unlink",
+        "Remove a specific contact from your alert list.",
+        "Usage: /unlink <code>contact_id</code>. Find the ID via /contactlist.",
+    ),
+    (
+        "bundle",
+        "Create one link that adds multiple contacts at once.",
+        "Usage: /bundle <code>id1 id2 ... [me]</code>. Share the generated link "
+        "with a runner so they add every listed contact when they tap Start.",
+    ),
+    (
+        "blacklist",
+        "Contacts can opt out of specific runners.",
+        "Usage: /blacklist list|add|remove <code>runner_id</code>. Use it if "
+        "you no longer wish to receive alerts from certain runners.",
+    ),
+    (
+        "stopalerts",
+        "Unsubscribe from every runner you alert.",
+        "Usage: /stopalerts. Removes you from all alert lists so you no longer "
+        "receive notifications.",
+    ),
+]
+
+
+HELP_LOOKUP = {cmd: (summary, details) for cmd, summary, details in HELP_ENTRIES}
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     tz = context.user_data.get(UD_TZ, DEFAULT_TZ)
     msg = (
         f"Hi {user.first_name or 'there'}! I’ll monitor your exercise sessions.\n\n"
+        "• Use /help to see every command or /help begin for detailed instructions.\n"
         "• Use /link to generate your invite link to share with people you want alerted.\n"
         "They must open your link and press Start so I can DM them if needed.\n"
         "• Use /contactlink to generate your invite link to share with people whom you want to alert you.\n"
@@ -23,6 +106,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Current timezone: {tz} (change with /tz <code>IANA_tz</code>, e.g. /tz Asia/Singapore)"
     )
     await update.effective_chat.send_message(msg)
+
+
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        lines = ["Commands:"]
+        for cmd, summary, _ in HELP_ENTRIES:
+            lines.append(f"/{cmd} – {summary}")
+        lines.append("Use /help <command> for detailed instructions.")
+        await update.effective_chat.send_message("\n".join(lines))
+        return
+
+    query = context.args[0].lstrip("/ ").lower()
+    if not query:
+        query = "help"
+
+    entry = HELP_LOOKUP.get(query)
+    if entry is None:
+        await update.effective_chat.send_message(
+            "I don’t know that command. Use /help to see the full list."
+        )
+        return
+
+    summary, details = entry
+    await update.effective_chat.send_message(
+        f"/{query} – {summary}\n\n{details}"
+    )
 
 
 async def tz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
