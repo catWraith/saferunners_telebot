@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     job = context.job
     chat_id = job.chat_id
-    payload = job.data or {}
+    payload = getattr(job, "data", None) or {}
     owner_id = payload.get("owner_id")
 
     # If the session was cancelled or completed, bail
@@ -32,7 +32,8 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     contacts = list_contacts(context.bot_data, owner_id)
     # Skip contacts who blacklisted this runner
     blmap = context.bot_data.get(BD_BLACKLIST, {})
-    loc = payload.get("location")
+    session = context.user_data.get(UD_ACTIVE, {})
+    loc = payload.get("location") or session.get("location")
 
     if not contacts:
         try:
@@ -42,20 +43,23 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # Compose + send
+    who = "the user"
     try:
-        owner = await context.bot.get_chat(chat_id)  # safe; just for name
-        who = owner.full_name or "the user"
+        chat_info = await context.bot.get_chat(owner_id)  # safe; just for name
+        who = chat_info.full_name or "the user"
     except Exception:
-        who = "the user"
+        pass
+
+    owner_identifier = owner_id
 
     alert_text = (
-        f"⚠️ Safety alert for {who}, {chat_id}\n"
+        f"⚠️ Safety alert for {who}, {owner_identifier}\n"
         "They did not check in as completed by their planned end time.\n"
     )
 
     for cid in contacts:
         bl = blmap.get(str(cid), [])
-        if owner.id in bl:
+        if owner_identifier in bl:
             continue
         try:
             await context.bot.send_message(cid, alert_text)
@@ -73,3 +77,7 @@ async def deadline_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(chat_id, f"Attempted to notify {len(contacts)} contact(s).")
     except Exception:
         pass
+
+    # Clear session state now that the deadline ran.
+    context.user_data.pop(UD_ACTIVE, None)
+    context.user_data.pop(UD_JOB, None)
