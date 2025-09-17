@@ -16,6 +16,7 @@ from bot.config import TELEGRAM_TOKEN, PERSISTENCE_FILE
 from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME
 from bot.handlers.start import (
     start,
+    help_cmd,
     tz_cmd,
     link_cmd,
     contactlink_cmd,
@@ -52,13 +53,14 @@ def build_app() -> Application:
     # Deep-link /start with parameter *before* bare /start so it can catch the param variant
     app.add_handler(
         MessageHandler(
-        filters.Regex(r"^/start\s+\S+"),  # only matches when a param exists
-        start_param_entry,
-        block=False,  # don't block other handlers
+            filters.Regex(r"^/start\s+\S+"),  # only matches when a param exists
+            start_param_entry,
+            block=False,  # don't block other handlers
         )
     )
     # app.add_handler(MessageHandler(filters.Regex(r"^/start(\s+.+)?$"), start_param_entry))
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
 
     # Core commands
     app.add_handler(CommandHandler("tz", tz_cmd))
