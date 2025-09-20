@@ -1,95 +1,239 @@
-from telegram import Update
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+from telegram.error import TelegramError
+
 from bot.config import DEFAULT_TZ, ALERT_WHEN_ADDED
 from bot.utils.time_utils import is_valid_tz
 from bot.utils.contacts import (
-    add_contact, list_contacts, remove_contact_everywhere,
-    remove_contact, blacklist_add, blacklist_remove, blacklist_list
+    add_contact,
+    list_contacts,
+    remove_contact_everywhere,
+    remove_contact,
+    blacklist_add,
+    blacklist_remove,
+    blacklist_list,
 )
 from bot.utils.links import build_deep_link, build_contact_offer_link, build_bundle_link
 from bot.constants import UD_TZ
 
 
-HELP_ENTRIES = [
-    (
-        "help",
-        "Show all commands or get instructions for one command.",
-        "Usage: /help [command]\n"
-        "Without arguments it lists every command with a short description."
-        " Add a command (with or without the slash) to see detailed guidance.",
-    ),
-    (
-        "start",
-        "Show the welcome message and process invite links.",
-        "Use /start any time to see the quick-start tips again. If you tap a "
-        "deep link such as /start link_<code>user_id</code> or /start "
-        "contact_<code>contact_id</code>, I’ll automatically authorize that "
-        "relationship.",
-    ),
-    (
-        "begin",
-        "Start an exercise safety session.",
-        "Usage: /begin. I’ll ask for your location (GPS pin or text) and your "
-        "expected finish time. Tap <b>Complete ✅</b> when you’re safe, or "
-        "<b>Cancel</b> to abort the session.",
-    ),
-    (
-        "tz",
-        "Set your timezone for deadlines.",
-        "Usage: /tz <code>IANA_timezone</code> (e.g. /tz Asia/Singapore)."
-        " This affects how I interpret the end time you enter during /begin.",
-    ),
-    (
-        "link",
-        "Generate a runner invite link for alert contacts.",
-        "Usage: /link. Share the generated URL with people who should be "
-        "alerted if you miss a check-in. They must open it and press Start once.",
-    ),
-    (
-        "contactlink",
-        "Generate a contact invite link for runners.",
-        "Usage: /contactlink. Share this when you want runners to add you as "
-        "their alert contact. They only need to press Start once.",
-    ),
-    (
-        "contacts",
-        "Show how many alert contacts you currently have.",
-        "Usage: /contacts. Displays the count of contacts who are authorized "
-        "to receive alerts about your sessions.",
-    ),
-    (
-        "contactlist",
-        "List alert contacts with best-effort names and IDs.",
-        "Usage: /contactlist. I’ll try to display each contact’s name and "
-        "Telegram ID.",
-    ),
-    (
-        "unlink",
-        "Remove a specific contact from your alert list.",
-        "Usage: /unlink <code>contact_id</code>. Find the ID via /contactlist.",
-    ),
-    (
-        "bundle",
-        "Create one link that adds multiple contacts at once.",
-        "Usage: /bundle <code>id1 id2 ... [me]</code>. Share the generated link "
-        "with a runner so they add every listed contact when they tap Start.",
-    ),
-    (
-        "blacklist",
-        "Contacts can opt out of specific runners.",
-        "Usage: /blacklist list|add|remove <code>runner_id</code>. Use it if "
-        "you no longer wish to receive alerts from certain runners.",
-    ),
-    (
-        "stopalerts",
-        "Unsubscribe from every runner you alert.",
-        "Usage: /stopalerts. Removes you from all alert lists so you no longer "
-        "receive notifications.",
-    ),
-]
+logger = logging.getLogger(__name__)
 
 
-HELP_LOOKUP = {cmd: (summary, details) for cmd, summary, details in HELP_ENTRIES}
+@dataclass(frozen=True)
+class HelpEntry:
+    command: str
+    summary: str
+    details: tuple[str, ...]
+
+
+HELP_ENTRIES: tuple[HelpEntry, ...] = (
+    HelpEntry(
+        command="help",
+        summary="List commands or get instructions for one.",
+        details=(
+            "Usage: /help [command]",
+            "Without arguments it lists every command with a short description.",
+            "Add a command (with or without the slash) to see detailed guidance.",
+        ),
+    ),
+    HelpEntry(
+        command="start",
+        summary="Show the welcome message and process invite links.",
+        details=(
+            "Use /start any time to see the quick-start tips again.",
+            "If you tap a deep link such as /start link_<code>user_id</code>",
+            "or /start contact_<code>contact_id</code>, I’ll automatically",
+            "authorize that relationship.",
+        ),
+    ),
+    HelpEntry(
+        command="begin",
+        summary="Start an exercise safety session.",
+        details=(
+            "Usage: /begin.",
+            "I’ll ask for your location (GPS pin or text) and your expected",
+            "finish time. Tap <b>Complete ✅</b> when you’re safe, or",
+            "<b>Cancel</b> to abort the session.",
+        ),
+    ),
+    HelpEntry(
+        command="tz",
+        summary="Set your timezone for deadlines.",
+        details=(
+            "Usage: /tz <code>IANA_timezone</code> (e.g. /tz Asia/Singapore).",
+            "This affects how I interpret the end time you enter during /begin.",
+        ),
+    ),
+    HelpEntry(
+        command="link",
+        summary="Generate a runner invite link for alert contacts.",
+        details=(
+            "Usage: /link.",
+            "Share the generated URL with people who should be alerted if you",
+            "miss a check-in. They must open it and press Start once.",
+        ),
+    ),
+    HelpEntry(
+        command="contactlink",
+        summary="Generate a contact invite link for runners.",
+        details=(
+            "Usage: /contactlink.",
+            "Share this when you want runners to add you as their alert contact.",
+            "They only need to press Start once.",
+        ),
+    ),
+    HelpEntry(
+        command="contacts",
+        summary="Show how many alert contacts you currently have.",
+        details=(
+            "Usage: /contacts.",
+            "Displays the count of contacts who are authorized to receive alerts",
+            "about your sessions.",
+        ),
+    ),
+    HelpEntry(
+        command="contactlist",
+        summary="List alert contacts with best-effort names and IDs.",
+        details=(
+            "Usage: /contactlist.",
+            "I’ll try to display each contact’s name and Telegram ID.",
+        ),
+    ),
+    HelpEntry(
+        command="unlink",
+        summary="Remove a specific contact from your alert list.",
+        details=(
+            "Usage: /unlink <code>contact_id</code>.",
+            "Find the ID via /contactlist.",
+        ),
+    ),
+    HelpEntry(
+        command="bundle",
+        summary="Create one link that adds multiple contacts at once.",
+        details=(
+            "Usage: /bundle <code>id1 id2 ... [me]</code>.",
+            "Share the generated link with a runner so they add every listed",
+            "contact when they tap Start.",
+        ),
+    ),
+    HelpEntry(
+        command="blacklist",
+        summary="Contacts can opt out of specific runners.",
+        details=(
+            "Usage: /blacklist list|add|remove <code>runner_id</code>.",
+            "Use it if you no longer wish to receive alerts from certain runners.",
+        ),
+    ),
+    HelpEntry(
+        command="stopalerts",
+        summary="Unsubscribe from every runner you alert.",
+        details=(
+            "Usage: /stopalerts.",
+            "Removes you from all alert lists so you no longer receive",
+            "notifications.",
+        ),
+    ),
+)
+
+
+HELP_LOOKUP = {entry.command: (entry.summary, "\n".join(entry.details)) for entry in HELP_ENTRIES}
+
+TELEGRAM_MESSAGE_LIMIT = 4096
+HELP_PAGE_CALLBACK_PREFIX = "help:page:"
+
+
+def _build_short_help_pages() -> tuple[str, ...]:
+    header = "Commands:"
+    footer = "Use /help <code>command</code> for detailed instructions."
+    summary_lines = [f"/{entry.command} – {entry.summary}" for entry in HELP_ENTRIES]
+
+    pages: list[str] = []
+    current_body: list[str] = []
+
+    for line in summary_lines:
+        candidate_lines = [header, *current_body, line, footer]
+        candidate_text = "\n".join(candidate_lines)
+        if len(candidate_text) > TELEGRAM_MESSAGE_LIMIT and current_body:
+            page_text = "\n".join([header, *current_body, footer])
+            pages.append(page_text)
+            current_body = [line]
+            continue
+        current_body.append(line)
+
+    final_page = "\n".join([header, *current_body, footer])
+    pages.append(final_page)
+
+    total_pages = len(pages)
+    if total_pages > 1:
+        annotated_pages: list[str] = []
+        for idx, page in enumerate(pages, start=1):
+            annotation = f"\n\nPage {idx} of {total_pages}"
+            if len(page) + len(annotation) <= TELEGRAM_MESSAGE_LIMIT:
+                annotated_pages.append(f"{page}{annotation}")
+            else:
+                annotated_pages.append(page)
+        return tuple(annotated_pages)
+
+    return tuple(pages)
+
+
+SHORT_HELP_PAGES = _build_short_help_pages()
+
+
+def _help_page_keyboard(page_index: int) -> InlineKeyboardMarkup | None:
+    total_pages = len(SHORT_HELP_PAGES)
+    if total_pages <= 1:
+        return None
+
+    buttons = []
+    if page_index > 0:
+        buttons.append(
+            InlineKeyboardButton(
+                "◀️ Previous",
+                callback_data=f"{HELP_PAGE_CALLBACK_PREFIX}{page_index - 1}",
+            )
+        )
+    if page_index < total_pages - 1:
+        buttons.append(
+            InlineKeyboardButton(
+                "Next ▶️",
+                callback_data=f"{HELP_PAGE_CALLBACK_PREFIX}{page_index + 1}",
+            )
+        )
+
+    if not buttons:
+        return None
+
+    return InlineKeyboardMarkup([buttons])
+
+
+async def _send_with_length_logging(
+    *,
+    send_callable: Callable[..., Awaitable[Any]],
+    text: str,
+    log_context: str,
+    **kwargs: Any,
+):
+    length = len(text)
+    logger.info("%s: sending message with %s characters", log_context, length)
+    try:
+        return await send_callable(text=text, **kwargs)
+    except TelegramError as exc:
+        logger.exception(
+            "%s: failed to deliver message with %s characters: %s",
+            log_context,
+            length,
+            exc,
+        )
+        raise
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -105,16 +249,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• Tap <b>Complete ✅</b> when you’re done. If you don’t, I’ll notify your contacts at the deadline.\n\n"
         f"Current timezone: {tz} (change with /tz <code>IANA_tz</code>, e.g. /tz Asia/Singapore)"
     )
-    await update.effective_chat.send_message(msg)
+    await _send_with_length_logging(
+        send_callable=update.effective_chat.send_message,
+        text=msg,
+        log_context="start",
+    )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        lines = ["Commands:"]
-        for cmd, summary, _ in HELP_ENTRIES:
-            lines.append(f"/{cmd} – {summary}")
-        lines.append("Use /help <command> for detailed instructions.")
-        await update.effective_chat.send_message("\n".join(lines))
+        page_index = 0
+        text = SHORT_HELP_PAGES[page_index]
+        reply_markup = _help_page_keyboard(page_index)
+        await _send_with_length_logging(
+            send_callable=update.effective_chat.send_message,
+            text=text,
+            reply_markup=reply_markup,
+            log_context="help_cmd[summary]",
+        )
         return
 
     query = context.args[0].lstrip("/ ").lower()
@@ -123,14 +275,51 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     entry = HELP_LOOKUP.get(query)
     if entry is None:
-        await update.effective_chat.send_message(
-            "I don’t know that command. Use /help to see the full list."
+        await _send_with_length_logging(
+            send_callable=update.effective_chat.send_message,
+            text="I don’t know that command. Use /help to see the full list.",
+            log_context="help_cmd[unknown]",
         )
         return
 
     summary, details = entry
-    await update.effective_chat.send_message(
-        f"/{query} – {summary}\n\n{details}"
+    await _send_with_length_logging(
+        send_callable=update.effective_chat.send_message,
+        text=f"/{query} – {summary}\n\n{details}",
+        log_context=f"help_cmd[{query}]",
+    )
+
+
+async def help_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    await query.answer()
+
+    data = query.data
+    if not data.startswith(HELP_PAGE_CALLBACK_PREFIX):
+        logger.warning("help_page_callback: unexpected data %s", data)
+        return
+
+    try:
+        page_index = int(data[len(HELP_PAGE_CALLBACK_PREFIX) :])
+    except ValueError:
+        logger.warning("help_page_callback: invalid page index %s", data)
+        return
+
+    if not 0 <= page_index < len(SHORT_HELP_PAGES):
+        logger.warning("help_page_callback: page index out of range: %s", page_index)
+        return
+
+    text = SHORT_HELP_PAGES[page_index]
+    reply_markup = _help_page_keyboard(page_index)
+
+    await _send_with_length_logging(
+        send_callable=query.edit_message_text,
+        text=text,
+        reply_markup=reply_markup,
+        log_context=f"help_cmd[summary_page_{page_index}]",
     )
 
 
