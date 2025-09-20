@@ -13,9 +13,37 @@ from telegram.ext import (
 )
 
 from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME, UD_ACTIVE, UD_JOB
-from bot.utils.time_utils import get_user_tz, parse_hhmm, local_hhmm_to_future_dt, to_utc, delay_seconds_from_utc_deadline
+from bot.utils.time_utils import (
+    get_user_tz,
+    parse_hhmm,
+    local_hhmm_to_future_dt,
+    to_utc,
+    delay_seconds_from_utc_deadline,
+)
 from bot.jobs.deadline import deadline_job
 from bot.utils.session_utils import format_location_summary
+
+
+def _session_action_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Complete", callback_data="complete")],
+            [
+                InlineKeyboardButton("Extend +15 min", callback_data="extend:15"),
+                InlineKeyboardButton("Extend +30 min", callback_data="extend:30"),
+            ],
+            [InlineKeyboardButton("❌ Cancel session", callback_data="cancel")],
+        ]
+    )
+
+
+def _format_session_message(session, end_local_dt) -> str:
+    loc_summary = format_location_summary(session.get("location"))
+    end_str = end_local_dt.strftime("%Y-%m-%d %H:%M (%Z)")
+    return (
+        f"Session armed.\n{loc_summary}\nPlanned end: {end_str}\n\n"
+        "Press <b>Complete</b> when you finish."
+    )
 
 
 def clear_active_session(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -115,20 +143,9 @@ async def confirm_and_schedule(update: Update, context: ContextTypes.DEFAULT_TYP
     session["end_dt_utc"] = end_dt_utc.isoformat()
     context.user_data[UD_ACTIVE] = session
 
-    ikb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Complete", callback_data="complete")],
-        [InlineKeyboardButton("❌ Cancel session", callback_data="cancel")],
-    ])
-
-    loc_summary = format_location_summary(session.get("location"))
-
-    tz = get_user_tz(context)
-    end_str = end_local_dt.strftime("%Y-%m-%d %H:%M (%Z)")
-
     await update.effective_chat.send_message(
-        f"Session armed.\n{loc_summary}\nPlanned end: {end_str}\n\n"
-        "Press <b>Complete</b> when you finish.",
-        reply_markup=ikb,
+        _format_session_message(session, end_local_dt),
+        reply_markup=_session_action_keyboard(),
     )
 
     delay = delay_seconds_from_utc_deadline(end_dt_utc)
@@ -181,6 +198,76 @@ async def button_handler(update, context):
             await query.edit_message_text("Nice work! Session marked complete. No alerts will be sent.")
         else:
             await query.edit_message_text("Session cancelled.")
+        return
+
+    if data.startswith("extend:"):
+        try:
+            minutes = int(data.split(":", 1)[1])
+        except Exception:
+            await update.effective_chat.send_message("Sorry, I couldn't understand that extension request.")
+            return
+
+        session = context.user_data.get(UD_ACTIVE)
+        if not session or not session.get("end_dt_utc"):
+            await update.effective_chat.send_message("No active session to extend.")
+            return
+
+        try:
+            current_deadline = datetime.fromisoformat(session["end_dt_utc"])
+        except Exception:
+            await update.effective_chat.send_message(
+                "Sorry, I couldn't parse the existing deadline. Please start a new session with /begin."
+            )
+            return
+
+        new_deadline_utc = current_deadline + timedelta(minutes=minutes)
+        session["end_dt_utc"] = new_deadline_utc.isoformat()
+        context.user_data[UD_ACTIVE] = session
+
+        job = context.user_data.get(UD_JOB)
+        if job and getattr(job, "data", None) is not None:
+            job.data["deadline_iso"] = new_deadline_utc.isoformat()
+            job.data["location"] = session.get("location")
+            if update.effective_user is not None:
+                job.data["owner_id"] = update.effective_user.id
+
+        if job:
+            try:
+                job.schedule_removal()
+            except Exception:
+                pass
+
+        if context.job_queue is None:
+            await update.effective_chat.send_message(
+                "⚠️ Scheduling unavailable (JobQueue missing). Ask the admin to install python-telegram-bot[job-queue]."
+            )
+            return
+
+        delay = delay_seconds_from_utc_deadline(new_deadline_utc)
+        delay = max(delay, 1.0)
+        effective_user = update.effective_user
+        user_id = effective_user.id if effective_user is not None else None
+        chat = update.effective_chat
+        new_job = context.job_queue.run_once(
+            deadline_job,
+            delay,
+            chat_id=chat.id if chat else None,
+            user_id=user_id,
+            name=f"deadline_{user_id}" if user_id is not None else "deadline_unknown",
+            data={
+                "location": session.get("location"),
+                "owner_id": user_id,
+                "deadline_iso": new_deadline_utc.isoformat(),
+            },
+        )
+        context.user_data[UD_JOB] = new_job
+
+        tz = get_user_tz(context)
+        new_end_local = new_deadline_utc.astimezone(tz)
+        await query.edit_message_text(
+            _format_session_message(session, new_end_local),
+            reply_markup=_session_action_keyboard(),
+        )
         return
 
 
