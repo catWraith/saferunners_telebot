@@ -6,7 +6,11 @@ logger = logging.getLogger(__name__)
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     # PTB recommends not raising; just log it
-    logger.exception("Unhandled exception while handling update=%r", update)
+    logger.exception(
+        "Unhandled exception while handling update=%r. error=%r",
+        update,
+        context.error,
+    )
     # If you want to tell the user something (optional):
     if isinstance(update, Update) and update.effective_chat:
         try:

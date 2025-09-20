@@ -17,6 +17,8 @@ from bot.constants import ASK_LOCATION, ASK_TIME, ASK_CUSTOM_TIME
 from bot.handlers.start import (
     start,
     help_cmd,
+    help_page_callback,
+    HELP_PAGE_CALLBACK_PREFIX,
     tz_cmd,
     link_cmd,
     contactlink_cmd,
@@ -61,6 +63,12 @@ def build_app() -> Application:
     # app.add_handler(MessageHandler(filters.Regex(r"^/start(\s+.+)?$"), start_param_entry))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(
+        CallbackQueryHandler(
+            help_page_callback,
+            pattern=rf"^{HELP_PAGE_CALLBACK_PREFIX}\\d+$",
+        )
+    )
 
     # Core commands
     app.add_handler(CommandHandler("tz", tz_cmd))
