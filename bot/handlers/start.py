@@ -32,7 +32,7 @@ HELP_ENTRIES: tuple[HelpEntry, ...] = (
         command="help",
         summary="List commands or get instructions for one.",
         details=(
-            "Usage: /help [command]",
+            "Usage: /help <code>command</code>",
             "Without arguments it lists every command with a short description.",
             "Add a command (with or without the slash) to see detailed guidance.",
         ),
@@ -142,7 +142,7 @@ HELP_LOOKUP = {entry.command: (entry.summary, "\n".join(entry.details)) for entr
 SHORT_HELP_TEXT = "\n".join(
     ["Commands:"]
     + [f"/{entry.command} – {entry.summary}" for entry in HELP_ENTRIES]
-    + ["Use /help <command> for detailed instructions."]
+    + ["Use /help <code>command</code> for detailed instructions."]
 )
 
 
@@ -151,7 +151,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tz = context.user_data.get(UD_TZ, DEFAULT_TZ)
     msg = (
         f"Hi {user.first_name or 'there'}! I’ll monitor your exercise sessions.\n\n"
-        "• Use /help to see every command or /help begin for detailed instructions.\n"
+        "• Use /help to see every command or /help <code>command</code> for detailed instructions.\n"
         "• Use /link to generate your invite link to share with people you want alerted.\n"
         "They must open your link and press Start so I can DM them if needed.\n"
         "• Use /contactlink to generate your invite link to share with people whom you want to alert you.\n"

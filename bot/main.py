@@ -46,7 +46,7 @@ def build_app() -> Application:
         Application.builder()
         .token(TELEGRAM_TOKEN)
         .persistence(persistence)
-        .defaults(Defaults(parse_mode=ParseMode.HTML))  # << add this
+        .defaults(Defaults(parse_mode=ParseMode.HTML))
         .build()
     )
 
