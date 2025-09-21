@@ -332,7 +332,7 @@ async def start_param_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def unlink_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Runner removes a specific contact id from their alert list."""
     if not context.args:
-        await update.effective_chat.send_message("Usage: /unlink <contact_id>")
+        await update.effective_chat.send_message("Usage: /unlink <code>contact_id</code>")
         return
     try:
         cid = int(context.args[0])
@@ -376,9 +376,9 @@ async def blacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_chat.send_message(
             "Usage:\n"
             "/blacklist list\n"
-            "/blacklist add <runner_id>\n"
-            "/blacklist remove <runner_id>\n\n"
-            "Replace <runner_id> with the numeric ID of the runner you want to block."
+            "/blacklist add <code>runner_id</code>\n"
+            "/blacklist remove <code>runner_id</code>\n\n"
+            "Replace <code>runner_id</code> with the numeric ID of the runner you want to block."
         )
         return
     sub = context.args[0].lower()
@@ -418,7 +418,7 @@ async def bundle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """
     args = context.args or []
     if not args:
-        await update.effective_chat.send_message("Usage: /bundle <id1> <id2> ... [me]")
+        await update.effective_chat.send_message("Usage: /bundle <code>id1 id2 ... [me]</code>")
         return
     contact_ids = []
     for a in args:
